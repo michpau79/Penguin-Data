@@ -1,8 +1,10 @@
 ---
 title: "Pengiun-Notebook"
 author: "Paulitsch, Michael A."
-date: "2023-03-06"
-output: html_document
+date: '2023-03-06'
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -36,8 +38,44 @@ dbWriteTable(db, "penguins_raw",  readr::read_csv("penguins_raw.csv"))
 
 ```{sql connection=db}
 SELECT DISTINCT Species
-FROM penguins_raw
+FROM penguins_raw;
 ```
+
+```{sql connection=db}
+SELECT DISTINCT Island
+FROM penguins_raw;
+```
+
+```{sql connection=db}
+SELECT COUNT(Sex)
+FROM penguins_raw
+WHERE Sex='MALE';
+```
+
+
+```{sql connection=db}
+SELECT Sex, COUNT(Sex)
+FROM penguins_raw
+GROUP BY Sex;
+```
+
+
+```{sql connection=db}
+PRAGMA table_info(penguins_raw);
+```
+
+```{sql connection=db}
+PRAGMA database_list;
+```
+
+
+```{sql connection=db}
+SELECT AVG("Culmen Depth (mm)"), AVG("Flipper Length (mm)")
+FROM penguins_raw;
+```
+
+
+
 
 ```{r}
 penguins <- dbReadTable(db, "penguins")
@@ -46,13 +84,36 @@ head(penguins)
 head(penguins_raw)
 ```
 
+
+
+
 ```{r}
 library(tidyverse)
+library(ggplot2)
 ```
 
 ```{r}
 str(penguins_raw)
 ```
+
+```{sql connection=db}
+SELECT Region, COUNT(Region)
+FROM penguins_raw
+GROUP BY Region;
+```
+```{sql connection=db}
+SELECT Island, COUNT(Island)
+FROM penguins_raw
+GROUP BY Island;
+```
+
+
+```{sql connection=db}
+SELECT "Clutch.Completion", COUNT("Clutch.Completion")
+FROM penguins_raw
+GROUP BY "Clutch.Completion";
+```
+
 
 ```{r}
 summary(penguins)
@@ -71,6 +132,36 @@ vis_miss(penguins)
 vis_dat(penguins)
 #Colors: https://docs.ropensci.org/visdat/articles/customising-colour-palettes.html
 ```
+
+```{r}
+colSums(is.na(penguins))
+```
+```{r}
+comments <- penguins_raw %>%
+  select(Comments) %>%
+  na.omit()
+comments
+```
+
+```{sql connection=db}
+SELECT Comments, COUNT(Comments)
+FROM penguins_raw
+GROUP BY "Comments";
+```
+
+
+```{r}
+sex_nas <- penguins_raw %>%
+  select(Sex,Comments) %>%
+  subset(is.na(Sex)) %>%
+  group_by(Comments) %>%
+  count() %>%
+  ungroup() %>%
+  arrange(n)
+sex_nas
+```
+
+
 
 ```{r}
 #library(skimr)
@@ -161,15 +252,39 @@ ggplot(na.omit(bar_plot_stacked), aes(fill=fct_rev(species), y=n, x=island)) +
 ```
 
 ```{r}
+bar_plot_stacked2 <- penguins %>% 
+  group_by(species, island, year) %>%
+  count() %>% 
+  ungroup() %>%
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(species) %>%
+  mutate(labels = scales::percent(perc))
+bar_plot_stacked
+
+
+ggplot(na.omit(bar_plot_stacked2), aes(fill=fct_rev(species), y=n, x=island)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~year) +
+  scale_fill_manual(values = c("#DADAEB", "#9E9AC8", "#6A51A3")) +
+  labs(title = "Verteilung der Spezies auf die drei Inseln", fill='Spezies', x = "Inseln", y = 'Absolute Zahlen') +
+  theme(strip.background = element_blank()) +
+  theme_bw()
+```
+
+
+
+
+```{r}
 ggplot(penguins, aes(x = year)) +
   geom_bar(fill = "mediumpurple") +
   labs(title = "Verteilung des Datensatzes über die drei Jahre", x = "Jahre", y = 'Absolute Zahlen') +
   theme_classic()
 ```
 
+
 ```{r}
 ggplot(penguins, aes(x = '', y = body_mass_g)) +
-    geom_boxplot() +
+    geom_boxplot(color ="mediumpurple") +
     labs(y = "Gewicht", x = "") +
     scale_y_continuous(expand = c(0, 0), limits = c(0.0, 6500)) +
     labs(title = "Gewichtsverteilung aller Pinguine", subtitle = "in Gramm", x = "", y = 'Gewicht') +
@@ -178,7 +293,7 @@ ggplot(penguins, aes(x = '', y = body_mass_g)) +
 
 ```{r}
 ggplot(na.omit(penguins), aes(x = species, y = body_mass_g)) +
-  geom_boxplot() +
+  geom_boxplot(color="mediumpurple") +
   labs(y = "Gewicht", x = "") +
   scale_y_continuous(expand = c(0, 0), limits = c(0.0, 6500)) +
   labs(title = "Gewichtsverteilung je Pinguin-Spezies", subtitle = "in Gramm", x = "", y = 'Gewicht') +
@@ -208,6 +323,69 @@ ggplot(na.omit(penguins), aes(x = species, y = flipper_length_mm, col=species)) 
         scale_y_continuous(expand = c(0, 0), limits = c(0.5, 6.5)) +
         theme_bw()
 ```
+
+
+
+```{r}
+#https://coder.social/kassambara/ggpubr/issues/46
+#https://coder.social/kassambara/ggpubr/
+my_comparisons <- list(c("Adelie", "Chinstrap"), c("Adelie", "Gentoo"), c("Gentoo","Chinstrap"))
+ggboxplot(na.omit(penguins), x = "species", y = "flipper_length_mm", add="jitter", merge = "flip", ylab = "Flipper Length (mm)", color = "species") +
+  stat_compare_means(comparisons = my_comparisons) +
+  stat_compare_means(label.y = 260) 
+```
+```{r}
+library(ggsignif)
+ggboxplot(na.omit(penguins), x = "species", y = "flipper_length_mm", add="jitter", merge = "flip", ylab = "Flipper Length (mm)", color = "species") +
+  stat_compare_means(method = "anova", label.y = 260) +
+  stat_compare_means(comparisons = list(c("Adelie","Gentoo")), method = "t.test", label.y = 250) +
+  stat_compare_means(comparisons = list(c("Adelie","Chinstrap")), method = "t.test", label.y = 235) +
+  stat_compare_means(comparisons = list(c("Gentoo","Chinstrap")), method = "t.test", label.y = 250)
+```
+
+
+```{r}
+#penguins_metrics_df <- na.omit(penguins) %>%
+#  select(3,4,5,6) %>%
+#  summary() %>%
+#  as.data.frame.matrix()
+#  str(.Last.value)
+
+library(dplyr)
+penguins_metrics_df_2 <- penguins %>%
+  select(3,4,5,6) %>%
+  as.data.frame()
+
+library(tidyr)
+penguins_metrics_df_3 <- do.call(cbind, lapply(penguins_metrics_df_2, summary))
+penguins_metrics_df_3 <- as.data.frame(penguins_metrics_df_3)
+penguins_metrics_df_3 <- t(penguins_metrics_df_3)
+penguins_metrics_df_3 <- as.data.frame(penguins_metrics_df_3)
+penguins_metrics_df_3$feature <- row.names(penguins_metrics_df_3)
+rownames(penguins_metrics_df_3) <- NULL
+penguins_metrics_df_3
+#penguins_metrics_df_3_long <- gather(penguins_metrics_df_3, feature, 1:7)
+```
+
+
+
+```{r}
+library(ggplot2)
+ggplot(penguins_metrics_df_3, aes(x = feature)) +
+  geom_point(aes(y="Mean", color="Mean", shape="Mean"))+
+  geom_point(aes(y="Median",color="Median",shape="Median"))+
+  geom_errorbar(aes(ymin = "Median" - "1st Qu.", ymax = "Median" + "3rd Qu."))+
+  scale_color_manual("Legend",values=c(Mean="black",Median="blue"))+
+  scale_shape_manual("Legend",values=c(Mean=19,Median=19)) +
+  labs(x ="feature", y = "cm") +
+  theme_bw() #+
+  #theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1)) +
+  #scale_y_continuous(expand = c(0,0),limits = c(0, 8.5)) #+
+  #scale_x_discrete(limits = c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","G-MAUQ_E", "G-MAUQ_I", "G-MAUQ_U", "G-MAUQ"))
+```
+
+
+
 
 ```{r}
 #https://journals.sagepub.com/doi/full/10.1177/0016986219890352
@@ -246,6 +424,7 @@ plotmeans(penguins_subset_years$flipper_length_mm ~ penguins_subset_years$specie
 
 
 ```{r}
+library(ggplot2)
 ggplot(penguins, aes(x = species, y = flipper_length_mm)) +
   geom_point() +
   geom_smooth(method = lm, se = TRUE) +
