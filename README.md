@@ -1,11 +1,12 @@
 In this repository, a typical data science life cycle is tried out on the Palmer Penguins-Dataset (links below):
 
 1. Identifing problems and data understanding
-2. Data collection
-3. Data processing
-4. Data analysis
-5. Data modelling
-6. Model deployment
+2. Data mining
+3. Data cleaning
+4. Data exploration
+5. feature engeneeing
+6. Predictive Modeling
+7. Data visualization
 
 
 
