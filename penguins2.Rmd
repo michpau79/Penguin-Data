@@ -1,0 +1,96 @@
+---
+title: "Penguins"
+author: "Michael"
+date: "2023-12-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(remotes)
+#remotes::install_github("allisonhorst/palmerpenguins", force=TRUE)
+```
+
+##Download der Penguins-Datreien
+Es gibt zwei CSV-Dateien: Eine Datei mit Rohdaten (penguins_raw.csv) und eine aufbereitete (penguins.csv).
+
+Von der entsprechenden Internetseite werden beide heruntergeladen: https://github.com/allisonhorst/palmerpenguins/find/main
+
+```{r}
+download.file(url = "https://raw.githubusercontent.com/allisonhorst/palmerpenguins/main/inst/extdata/penguins.csv"
+              , destfile = "penguins.csv")
+
+download.file(url = "https://raw.githubusercontent.com/allisonhorst/palmerpenguins/main/inst/extdata/penguins_raw.csv"
+              , destfile = "penguins_raw.csv")
+```
+
+
+
+```{r}
+penguins_raw <- read.csv('penguins_raw.csv')
+
+head(penguins_raw)
+```
+
+```{r}
+dim(penguins_raw)
+```
+```{r}
+library(visdat)
+vis_dat(penguins_raw)
+```
+```{r}
+vis_miss(penguins_raw)
+```
+
+```{r}
+str(penguins_raw)
+```
+
+```{r}
+class(penguins_raw$Date.Egg)
+
+penguins_raw$Date.Egg <- as.Date(penguins_raw$Date.Egg)
+
+class(penguins_raw$Date.Egg)
+```
+
+```{r}
+str(penguins_raw)
+```
+
+
+
+```{r}
+library(Hmisc)
+describe(penguins_raw$studyName)
+
+penguins_raw %>% 
+  describe(descript = studyName)
+```
+
+
+
+```{r}
+library(tidyverse)
+
+
+
+
+
+#penguins_long <- gather(penguins_raw, 
+  
+
+#penguins <- penguins_raw %>% 
+  gather()
+  select() %>% 
+  
+  
+  
+```
+

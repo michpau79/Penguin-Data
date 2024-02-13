@@ -1,0 +1,590 @@
+---
+title: "Pengiun-Notebook"
+author: "Paulitsch, Michael A."
+date: '2023-10-20'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(remotes)
+#remotes::install_github("allisonhorst/palmerpenguins", force=TRUE)
+#library(palmerpenguins)
+```
+
+##Download der Penguins-Datreien
+Es gibt zwei CSV-Dateien: Eine Datei mit Rohdaten (penguins_raw.csv) und eine aufbereitete (penguins.csv).
+
+Von der entsprechenden Internetseite werden beide heruntergeladen: https://github.com/allisonhorst/palmerpenguins/find/main
+
+```{r Download}
+download.file(url = "https://raw.githubusercontent.com/allisonhorst/palmerpenguins/main/inst/extdata/penguins.csv"
+              , destfile = "penguins.csv")
+
+download.file(url = "https://raw.githubusercontent.com/allisonhorst/palmerpenguins/main/inst/extdata/penguins_raw.csv"
+              , destfile = "penguins_raw.csv")
+```
+
+Um eine Inspektion der Daten vornehmen zu können, wird eine SQLite-Datenbank erstellt, indem beide Dateien in diese geladen werden:
+
+```{r}
+library(DBI)
+
+db <- dbConnect(RSQLite::SQLite(), dbname = ":memory:")
+
+dbWriteTable(db, "penguins",  readr::read_csv("penguins.csv"))
+dbWriteTable(db, "penguins_raw",  readr::read_csv("penguins_raw.csv"))
+```
+
+```{sql connection=db}
+UPDATE table SET DataA = NULL
+WHERE Data = 'NA';
+```
+
+
+
+```{r}
+penguins <- dbReadTable(db, "penguins")
+penguins_raw <- dbReadTable(db, "penguins_raw")
+```
+
+
+
+##Allgemeine ÜBersicht der Daten
+
+Mit folgendem Befehl wird eine Übersicht über die Vorhandenen Variablen ausgegeben:
+
+```{sql connection=db}
+SELECT * FROM pragma_table_info('penguins_raw');
+```
+
+```{r}
+str(penguins_raw)
+```
+
+```{r}
+library(visdat)
+vis_dat(penguins_raw)
+```
+
+###Daten im Einzelnen
+####Kategoriale Daten
+
+```{sql connection=db}
+SELECT studyName, (studyName)
+FROM penguins_rawcount
+GROUP BY studyName;
+```
+
+```{sql connection=db}
+SELECT 'Sample Number', count('Sample Number')
+FROM penguins_raw
+GROUP BY 'Sample Number';
+```
+
+```{sql connection=db}
+SELECT Species, count(Species)
+FROM penguins_raw
+GROUP BY Species;
+```
+
+```{sql connection=db}
+SELECT Island, count(Island)
+FROM penguins_raw
+GROUP BY Island;
+```
+
+```{sql connection=db}
+SELECT Region, count(Region)
+FROM penguins_raw
+GROUP BY Region;
+```
+
+```{sql connection=db}
+SELECT Sex, COUNT(Sex)
+FROM penguins_raw
+GROUP BY Sex;
+```
+
+```{sql connection=db}
+SELECT *
+FROM penguins_raw
+WHERE Sex IS NULL;
+```
+
+
+
+```{sql connection=db}
+SELECT 'Individual ID', COUNT('Individual ID')
+FROM penguins_raw
+GROUP BY 'Individual ID';
+```
+
+
+
+
+
+
+####Kontinuierliche Variablen
+
+```{sql connection=db}
+SELECT AVG("Culmen Depth (mm)"), AVG("Flipper Length (mm)")
+FROM penguins_raw;
+```
+
+```{r}
+head(penguins)
+head(penguins_raw)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+```{r}
+str(penguins_raw)
+```
+
+```{sql connection=db}
+SELECT Region, COUNT(Region)
+FROM penguins_raw
+GROUP BY Region;
+```
+
+
+```{sql connection=db}
+SELECT Island, COUNT(Island)
+FROM penguins_raw
+GROUP BY Island;
+```
+
+
+```{sql connection=db}
+SELECT "Clutch.Completion", COUNT("Clutch.Completion")
+FROM penguins_raw
+GROUP BY "Clutch.Completion";
+```
+
+
+
+
+```{r}
+vis_dat(penguins)
+#Colors: https://docs.ropensci.org/visdat/articles/customising-colour-palettes.html
+```
+
+```{r}
+colSums(is.na(penguins))
+```
+```{r}
+comments <- penguins_raw %>%
+  select(Comments) %>%
+  na.omit()
+comments
+```
+
+```{sql connection=db}
+SELECT Comments, COUNT(Comments)
+FROM penguins_raw
+GROUP BY "Comments";
+```
+
+
+```{r}
+sex_nas <- penguins_raw %>%
+  select(Sex,Comments) %>%
+  subset(is.na(Sex)) %>%
+  group_by(Comments) %>%
+  count() %>%
+  ungroup() %>%
+  arrange(n)
+sex_nas
+```
+
+
+
+```{r}
+#library(skimr)
+#skim(penguins)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+pie_plot_1 <- penguins %>% 
+  group_by(species) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>%
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(species) %>%
+  mutate(labels = scales::percent(perc))
+pie_plot_1
+```
+
+
+``` {r}
+ggplot(pie_plot_1, aes(x=" ", y=labels, fill=species)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start=0) + 
+  theme_void() +
+  geom_text(aes(label = labels), position = position_stack(vjust = 0.5), size = 5, color="black") +
+  scale_fill_brewer(palette="Purples") +
+  labs(title = "Relativer Anteil der einzelen Pinguin-Spezies am Datensatz", fill='Spezies')
+
+# Brewer-Palettes: https://jmsallan.netlify.app/blog/the-brewer-palettes/
+```
+
+```{r}
+pie_plot_2 <- penguins %>% 
+  group_by(island) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>%
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(island) %>%
+  mutate(labels = scales::percent(perc))
+pie_plot_2
+
+ggplot(pie_plot_2, aes(x=" ", y=labels, fill=island)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start=0) + 
+  theme_void() +
+  geom_text(aes(label = labels), position = position_stack(vjust = 0.5), size = 5, color="black") +
+  scale_fill_brewer(palette="Purples") +
+  labs(title = "Relative Verteilung der Pinguinen auf den Inseln", fill='Inseln')
+```
+
+```{r}
+pie_plot_3 <- penguins %>% 
+  group_by(sex) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>%
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(sex) %>%
+  mutate(labels = scales::percent(perc))
+pie_plot_3
+
+ggplot(pie_plot_3, aes(x=" ", y=labels, fill=sex)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start=0) + 
+  theme_void() +
+  geom_text(aes(label = labels), position = position_stack(vjust = 0.5), size = 5, color="black") +
+  scale_fill_discrete(labels=c('männlich', 'weiblich', 'fehlende Werte')) +
+  labs(title = "Relativer Geschlechtsanteil im Datensatz", fill='Geschlecht') +
+  scale_fill_brewer(palette="Purples")
+```
+
+```{r}
+bar_plot_stacked <- penguins %>% 
+  group_by(species, island) %>%
+  count() %>% 
+  ungroup() %>%
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(species) %>%
+  mutate(labels = scales::percent(perc))
+bar_plot_stacked
+
+
+ggplot(na.omit(bar_plot_stacked), aes(fill=fct_rev(species), y=n, x=island)) +
+  geom_bar(stat="identity") +
+  scale_fill_manual(values = c("#DADAEB", "#9E9AC8", "#6A51A3")) +
+  labs(title = "Verteilung der Spezies auf die drei Inseln", fill='Spezies', x = "Inseln", y = 'Absolute Zahlen') +
+  theme_classic()
+```
+
+```{r}
+bar_plot_stacked2 <- penguins %>% 
+  group_by(species, island, year) %>%
+  count() %>% 
+  ungroup() %>%
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(species) %>%
+  mutate(labels = scales::percent(perc))
+bar_plot_stacked
+
+
+ggplot(na.omit(bar_plot_stacked2), aes(fill=fct_rev(species), y=n, x=island)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~year) +
+  scale_fill_manual(values = c("#DADAEB", "#9E9AC8", "#6A51A3")) +
+  labs(title = "Verteilung der Spezies auf die drei Inseln", fill='Spezies', x = "Inseln", y = 'Absolute Zahlen') +
+  theme(strip.background = element_blank()) +
+  theme_bw()
+```
+
+
+
+
+```{r}
+ggplot(penguins, aes(x = year)) +
+  geom_bar(fill = "mediumpurple") +
+  labs(title = "Verteilung des Datensatzes über die drei Jahre", x = "Jahre", y = 'Absolute Zahlen') +
+  theme_classic()
+```
+
+
+```{r}
+ggplot(penguins, aes(x = '', y = body_mass_g)) +
+    geom_boxplot(color ="mediumpurple") +
+    labs(y = "Gewicht", x = "") +
+    scale_y_continuous(expand = c(0, 0), limits = c(0.0, 6500)) +
+    labs(title = "Gewichtsverteilung aller Pinguine", subtitle = "in Gramm", x = "", y = 'Gewicht') +
+    theme_classic() 
+```
+
+```{r}
+ggplot(na.omit(penguins), aes(x = species, y = body_mass_g)) +
+  geom_boxplot(color="mediumpurple") +
+  labs(y = "Gewicht", x = "") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0.0, 6500)) +
+  labs(title = "Gewichtsverteilung je Pinguin-Spezies", subtitle = "in Gramm", x = "", y = 'Gewicht') +
+  theme_classic()   
+```
+
+```{r}
+ggplot(na.omit(penguins), aes(x = species, y = bill_length_mm)) +
+        geom_boxplot() #+
+        labs(y = "1 (sehr geeignet) bis 6 (sehr ungeeignet)", x = "Für wie geeignet halten Sie Rollenspiele?") +
+        scale_y_continuous(expand = c(0, 0), limits = c(0.5, 6.5)) +
+        theme_bw()
+```
+
+```{r}
+ggplot(na.omit(penguins), aes(x = species, y = bill_depth_mm)) +
+        geom_boxplot() #+
+        labs(y = "1 (sehr geeignet) bis 6 (sehr ungeeignet)", x = "Für wie geeignet halten Sie Rollenspiele?") +
+        scale_y_continuous(expand = c(0, 0), limits = c(0.5, 6.5)) +
+        theme_bw()
+```
+
+```{r}
+ggplot(na.omit(penguins), aes(x = species, y = flipper_length_mm, col=species)) +
+        geom_boxplot() #+
+        labs(y = "1 (sehr geeignet) bis 6 (sehr ungeeignet)", x = "Für wie geeignet halten Sie Rollenspiele?") +
+        scale_y_continuous(expand = c(0, 0), limits = c(0.5, 6.5)) +
+        theme_bw()
+```
+
+
+
+```{r}
+#https://coder.social/kassambara/ggpubr/issues/46
+#https://coder.social/kassambara/ggpubr/
+my_comparisons <- list(c("Adelie", "Chinstrap"), c("Adelie", "Gentoo"), c("Gentoo","Chinstrap"))
+ggboxplot(na.omit(penguins), x = "species", y = "flipper_length_mm", add="jitter", merge = "flip", ylab = "Flipper Length (mm)", color = "species") +
+  stat_compare_means(comparisons = my_comparisons) +
+  stat_compare_means(label.y = 260) 
+```
+```{r}
+library(ggsignif)
+ggboxplot(na.omit(penguins), x = "species", y = "flipper_length_mm", add="jitter", merge = "flip", ylab = "Flipper Length (mm)", color = "species") +
+  stat_compare_means(method = "anova", label.y = 260) +
+  stat_compare_means(comparisons = list(c("Adelie","Gentoo")), method = "t.test", label.y = 250) +
+  stat_compare_means(comparisons = list(c("Adelie","Chinstrap")), method = "t.test", label.y = 235) +
+  stat_compare_means(comparisons = list(c("Gentoo","Chinstrap")), method = "t.test", label.y = 250)
+```
+
+
+```{r}
+#penguins_metrics_df <- na.omit(penguins) %>%
+#  select(3,4,5,6) %>%
+#  summary() %>%
+#  as.data.frame.matrix()
+#  str(.Last.value)
+
+library(dplyr)
+penguins_metrics_df_2 <- penguins %>%
+  select(3,4,5,6) %>%
+  as.data.frame()
+
+library(tidyr)
+penguins_metrics_df_3 <- do.call(cbind, lapply(penguins_metrics_df_2, summary))
+penguins_metrics_df_3 <- as.data.frame(penguins_metrics_df_3)
+penguins_metrics_df_3 <- t(penguins_metrics_df_3)
+penguins_metrics_df_3 <- as.data.frame(penguins_metrics_df_3)
+penguins_metrics_df_3$feature <- row.names(penguins_metrics_df_3)
+rownames(penguins_metrics_df_3) <- NULL
+penguins_metrics_df_3
+#penguins_metrics_df_3_long <- gather(penguins_metrics_df_3, feature, 1:7)
+```
+
+
+
+```{r}
+library(ggplot2)
+ggplot(penguins_metrics_df_3, aes(x = feature)) +
+  geom_point(aes(y="Mean", color="Mean", shape="Mean"))+
+  geom_point(aes(y="Median",color="Median",shape="Median"))+
+  geom_errorbar(aes(ymin = "Median" - "1st Qu.", ymax = "Median" + "3rd Qu."))+
+  scale_color_manual("Legend",values=c(Mean="black",Median="blue"))+
+  scale_shape_manual("Legend",values=c(Mean=19,Median=19)) +
+  labs(x ="feature", y = "cm") +
+  theme_bw() #+
+  #theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1)) +
+  #scale_y_continuous(expand = c(0,0),limits = c(0, 8.5)) #+
+  #scale_x_discrete(limits = c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","G-MAUQ_E", "G-MAUQ_I", "G-MAUQ_U", "G-MAUQ"))
+```
+
+
+
+
+```{r}
+#https://journals.sagepub.com/doi/full/10.1177/0016986219890352
+#https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=52eff0488d0b93ea4a259815148faeb3e9646600
+
+
+model_1 <- manova(cbind(body_mass_g, bill_length_mm, bill_depth_mm, flipper_length_mm) ~ species + year + year*species, data = penguins)
+model_1
+summary(model_1)
+summary.aov(model_1)
+```
+
+Über alle 4 AVs statistisch singifikante Unterschiede.
+Haupteffekte: immer Spezies, einmal Jahr (Flipper Length)
+Interaktionseffekte: bei Bill depth
+
+
+Wegen Jahr bei Flipper Length:
+```{r}
+penguins_subset_year_2007 <- penguins %>%
+filter(year == 2007)
+
+library(gplots)
+plotmeans(penguins_subset_year_2007$flipper_length_mm ~ penguins_subset_year_2007$species)
+```
+
+```{r}
+penguins_subset_years <- penguins %>%
+filter(year > 2007)
+
+plotmeans(penguins_subset_years$flipper_length_mm ~ penguins_subset_years$species)
+```
+
+
+
+
+
+```{r}
+library(ggplot2)
+ggplot(penguins, aes(x = species, y = flipper_length_mm)) +
+  geom_point() +
+  geom_smooth(method = lm, se = TRUE) +
+  facet_wrap(~ year) +
+  theme_minimal()
+```
+```{r}
+ggplot(penguins, aes(x = species, y = flipper_length_mm, group = species)) +
+  geom_boxplot() +
+  facet_wrap(~ year)
+```
+```{r}
+ggplot(penguins, aes(x = year, y = flipper_length_mm)) +
+  geom_point(aes(color = species)) +
+  geom_errorbar(aes(ymin = flipper_length_mm - 5, ymax = flipper_length_mm + 5)) +
+  facet_wrap(vars(species))
+```
+
+```{r}
+ggplot(data = filter(penguins, year == 2007), aes(x = species, y = flipper_length_mm, col=species)) +
+        geom_boxplot() #+
+        labs(y = "1 (sehr geeignet) bis 6 (sehr ungeeignet)", x = "Für wie geeignet halten Sie Rollenspiele?") +
+        scale_y_continuous(expand = c(0, 0), limits = c(0.5, 6.5)) +
+        theme_bw()
+```
+
+
+```{r}
+library(lsr)
+# etaSquared(model_1)
+
+# power test
+ 
+# Baesian MANOVA? 
+```
+
+```{r}
+library(tidymodels)
+```
+
+```{r}
+str(penguins)
+```
+
+
+```{r}
+penguins_ml <- penguins %>%
+  mutate_at(c("species","island","sex"), as.character) %>%
+  mutate(across(where(is.numeric), round)) %>%
+  mutate_at(c("flipper_length_mm","body_mass_g"), as.numeric)
+str(penguins_ml)
+```
+
+```{r}
+penguins_ml
+```
+
+
+```{r}
+#https://www.kirenz.com/post/2021-02-17-r-classification-tidymodels/
+
+penguins_split <- initial_split(penguins_ml, prop = 3/4)
+
+penguins_train <- training(penguins_split)
+penguins_test <- testing(penguins_split)
+
+penguins_cv <- vfold_cv(penguins_train)
+
+recipe_reg <- recipe(species ~ island + bill_length_mm +  bill_depth_mm + flipper_length_mm + body_mass_g + sex, data = penguins_ml)
+
+model_reg <- multinom_reg() %>%
+  set_engine(engine = "nnet") %>%  # model engine
+  set_mode("classification") # model mode
+
+wf_reg <- workflow() %>%
+  add_recipe(recipe_reg) %>%
+  add_model(model_reg)
+```
+
+```{r}
+grid_reg <- expand.grid(2,3,4)
+
+tune_results_reg <- wf_reg %>%
+  tune_grid(resamples = penguins_cv, grid = grid_reg, metrics = metric_set(accuracy, roc_auc))
+
+param_final <- tune_results_reg %>%
+  select_best(metric = "accuracy")
+param_final
+```
+
+```{r}
+fit_reg <- wf_reg %>%
+  last_fit(penguins_split)
+fit_reg
+```
+
+```{r}
+test_performance <- fit_reg %>%
+  collect_metrics()
+test_performance
+```
+
+```{r}
+test_predictions <- fit_reg %>%
+  collect_predictions()
+test_predictions
+```
+
+```{r}
+test_predictions %>%
+  conf_mat(truth = penguins_ml, estimate = .pred_class)
+test_predictions
+
+```
+

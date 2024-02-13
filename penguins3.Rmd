@@ -1,0 +1,241 @@
+---
+title: "Pengiuns_raw_R_Project"
+author: "Michael"
+date: "2024-01-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(gt)
+library(VGAM)
+library(brms)
+```
+
+```{r}
+download.file(url = "https://raw.githubusercontent.com/allisonhorst/palmerpenguins/main/inst/extdata/penguins_raw.csv", destfile = "penguins_raw.csv")
+```
+
+```{r}
+penguins_raw <- read.csv("penguins_raw.csv")
+```
+
+
+
+```{r}
+str(penguins_raw)
+```
+
+```{r}
+colnames(penguins_raw)
+```
+
+```{r}
+summary(penguins_raw)
+```
+
+##Descriptive Statistics
+
+```{r}
+penguins_raw_long_1 <- penguins_raw %>% 
+  select(7,1,3:6,8,14) %>% 
+  gather(key="categories", value="levels", 2:8)
+
+ggplot(penguins_raw_long_1, aes(x=levels)) +
+  geom_bar(fill = 'blue') +
+  facet_grid(~categories, scales = "free") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 350)) +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+penguins_raw_long_2 <- penguins_raw %>% 
+  select(7,3,10:12) %>% 
+  gather(key="measures", value="values", 3:5)
+
+ggplot(penguins_raw_long_2, aes(x = measures, y =values)) +
+  geom_boxplot(fill = 'blue') +
+  #facet_grid(~measures, scales = "free") +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 260))
+```
+
+```{r}
+ggplot(penguins_raw, aes(y = Body.Mass..g.)) +
+  geom_boxplot(fill = 'blue') +
+  theme_bw()
+```
+
+```{r}
+ggplot(penguins_raw, aes(x=Date.Egg)) +
+  geom_bar(fill = 'blue') +
+  theme_bw() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 21)) +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+#mean + sds
+```
+
+##Exploratory Data Analysis
+
+```{r}
+ggplot(penguins_raw_long_2, aes(x = Species, y = values)) +
+  geom_boxplot(colour = "blue") +
+  facet_grid(~measures) +
+  theme_bw()
+```
+
+```{r}
+penguins_raw_long_3 <- penguins_raw %>% 
+  select(7,3,10:13) %>% 
+  gather(key="measures", value="values", 3:5)
+
+ggplot(penguins_raw_long_3, aes(x = Body.Mass..g., y=values, colour= Species)) +
+  geom_point() +
+  facet_grid(~measures) +
+  theme_bw()
+```
+
+```{r}
+#sex & weight?
+```
+
+```{r}
+penguins_raw_long_4 <- penguins_raw %>% 
+  select(7,1,3:6,8,14) %>% 
+  gather(key="categories", value="levels", 4:8)
+
+ggplot(penguins_raw_long_4, aes(x = levels, fill = Species)) +
+  geom_bar() +
+  facet_grid(~categories, scales = "free") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+penguins_raw_perc <- penguins_raw %>% 
+  select(3,5) %>% 
+  filter(Species == "Adelie Penguin (Pygoscelis adeliae)") %>% 
+  group_by(Island) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(Percentage = n/sum(n)*100)
+
+gt(penguins_raw_perc)
+
+```
+
+```{r}
+#manova(cbind("Culmen.Length..mm.", "Culmen.Depth..mm.") ~ Species, na.action = na.exclude, data = penguins_raw)
+```
+
+```{r}
+library(tidymodels)
+```
+
+
+```{r}
+penguins_ml <- penguins_raw %>% 
+  select(3,10:13) %>% 
+  na.omit()
+
+data_split <- initial_split(penguins_ml, prop = 0.6)
+data_split
+```
+```{r}
+data_split %>% 
+  training() %>% 
+  glimpse()
+```
+
+```{r}
+data_recipe <- training(data_split) %>% 
+  recipe(Species ~.) %>% 
+  step_corr(all_predictors()) %>% 
+  step_center(all_date_predictors()) %>% 
+  step_scale(all_date_predictors()) %>% 
+  prep
+```
+
+```{r}
+data_recipe
+```
+
+```{r}
+data_training <- juice(data_recipe)
+```
+
+```{r}
+data_testing <- data_recipe %>% 
+  bake(data_split)
+```
+
+```{r}
+#glimpse(data_training)
+#glimpse(data_testing)
+```
+
+```{r}
+penguins_rf <- rand_forest(trees = 100, mode = "classification") %>% 
+  set_engine("ranger") %>% 
+  fit(Species ~ ., data = data_training)
+```
+
+```{r}
+penguins_rf %>% 
+  predict(data_testing) %>% 
+  bind_cols(data_testing) %>% 
+  metrics(truth = Species, estimate = .pred_class)
+```
+
+```{r}
+penguins_reg <- multinom_reg(mode = "classification") %>% 
+  set_engine("nnet") %>% 
+  fit(Species ~ ., data = data_training)
+```
+
+
+```{r}
+penguins_reg %>% 
+  predict(data_testing) %>% 
+  bind_cols(data_testing) %>% 
+  metrics(truth = Species, estimate = .pred_class)
+```
+
+
+```{r}
+penguins_raw$Species <- as.factor(penguins_raw$Species)
+
+penguins_raw_scaled <- penguins_raw %>%
+  mutate_at("Species", as.factor) %>% 
+  mutate_at(c("Culmen.Length..mm." + "Culmen.Depth..mm." + "Flipper.Length..mm." + "Body.Mass..g."), ~(scale(.) %>% as.vector))
+
+
+scale(penguins_raw$Culmen.Length..mm.)
+```
+
+
+
+```{r}
+penguins_infer <- vglm(Species ~ Culmen.Length..mm. + Culmen.Depth..mm. + Flipper.Length..mm. + Body.Mass..g., data = penguins_raw, family = multinomial, na.action = na.exclude)
+```
+
+```{r}
+summary(penguins_infer)
+```
+
+
+```{r}
+modell_1 <- brm(Species ~ 1 + Culmen.Length..mm. + Culmen.Depth..mm. + Flipper.Length..mm. + Body.Mass..g., data = penguins_raw, family = categorical(link = "logit"), warmup = 600, iter = 1250, chains = 2, seed=123, cores = 2)
+summary(modell_1)
+```
+
